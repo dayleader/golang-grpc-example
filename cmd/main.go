@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	apiv1 "golang-grpc-example/gen/pb-go/com.example/usersvcapi/v1"
@@ -99,12 +100,14 @@ func main() {
 }
 
 type userServer struct {
-	m map[string]*apiv1.UserWrite
+	m     map[string]*apiv1.UserWrite
+	mutex *sync.RWMutex
 }
 
 func NewUserGRPCServer() apiv1.UserServiceServer {
 	return &userServer{
-		m: map[string]*apiv1.UserWrite{},
+		m:     map[string]*apiv1.UserWrite{},
+		mutex: &sync.RWMutex{},
 	}
 }
 
@@ -114,6 +117,8 @@ func (s *userServer) CreateUser(ctx context.Context, req *apiv1.CreateUserReques
 		return nil,
 			status.Error(codes.Internal, err.Error())
 	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	s.m[id.String()] = req.User
 	return &apiv1.CreateUserResponse{
 		Id: id.String(),
@@ -121,6 +126,8 @@ func (s *userServer) CreateUser(ctx context.Context, req *apiv1.CreateUserReques
 }
 
 func (s *userServer) GetUser(ctx context.Context, req *apiv1.GetUserRequest) (*apiv1.GetUserResponse, error) {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	foundUser, ok := s.m[req.Id]
 	if !ok {
 		return nil,
